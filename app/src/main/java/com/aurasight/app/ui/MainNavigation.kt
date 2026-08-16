@@ -36,12 +36,12 @@ enum class AppTab(val icon: String, val label: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainNavigation(viewModel: GemmaViewModel) {
-    var selectedTab by remember { mutableStateOf(AppTab.VOICE) }
+    val selectedTab by viewModel.currentTab.collectAsState()
 
     val pendingAction by viewModel.pendingCameraAction.collectAsState()
     LaunchedEffect(pendingAction) {
         if (pendingAction != null) {
-            selectedTab = AppTab.CAMERA
+            viewModel.currentTab.value = AppTab.CAMERA
         }
     }
 
@@ -53,32 +53,44 @@ fun MainNavigation(viewModel: GemmaViewModel) {
                 },
                 navigationIcon = {
                     if (selectedTab != AppTab.VOICE) {
-                        IconButton(onClick = { selectedTab = AppTab.VOICE }) {
+                        IconButton(onClick = { viewModel.currentTab.value = AppTab.VOICE }) {
                             Text("⬅️", fontSize = 20.sp)
                         }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF161B22)
-                ),
-                actions = {
-                    if (selectedTab != AppTab.CAMERA) {
-                        IconButton(onClick = { selectedTab = AppTab.CAMERA }) {
-                            Text("📷", fontSize = 20.sp)
-                        }
-                    }
-                    if (selectedTab != AppTab.CART) {
-                        IconButton(onClick = { selectedTab = AppTab.CART }) {
-                            Text("🛒", fontSize = 20.sp)
-                        }
-                    }
-                    if (selectedTab != AppTab.KHATA) {
-                        IconButton(onClick = { selectedTab = AppTab.KHATA }) {
-                            Text("📒", fontSize = 20.sp)
-                        }
-                    }
-                }
+                    containerColor = Color(0xFF161B22),
+                    titleContentColor = Color(0xFFE6EDF3)
+                )
             )
+        },
+        bottomBar = {
+            // Hide bottom bar when inside Camera or Cart
+            if (selectedTab == AppTab.VOICE || selectedTab == AppTab.CART || selectedTab == AppTab.KHATA) {
+                NavigationBar(
+                    containerColor = Color(0xFF161B22),
+                    contentColor = Color(0xFF8B949E)
+                ) {
+                    NavigationBarItem(
+                        selected = selectedTab == AppTab.CART,
+                        onClick = { viewModel.currentTab.value = AppTab.CART },
+                        icon = { Text("🛒", fontSize = 24.sp) },
+                        label = { Text("بل") }
+                    )
+                    NavigationBarItem(
+                        selected = selectedTab == AppTab.VOICE,
+                        onClick = { viewModel.currentTab.value = AppTab.VOICE },
+                        icon = { Text("🎙️", fontSize = 24.sp) },
+                        label = { Text("Voice") }
+                    )
+                    NavigationBarItem(
+                        selected = selectedTab == AppTab.KHATA,
+                        onClick = { viewModel.currentTab.value = AppTab.KHATA },
+                        icon = { Text("📒", fontSize = 24.sp) },
+                        label = { Text("کھاتہ") }
+                    )
+                }
+            }
         },
         containerColor = Color(0xFF0D1117)
     ) { paddingValues ->

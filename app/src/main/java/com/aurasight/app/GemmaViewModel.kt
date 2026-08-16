@@ -14,8 +14,11 @@ import com.aurasight.app.ai.CameraActionDelegate
 import com.aurasight.app.ai.CameraToolSet
 import com.aurasight.app.ai.KhataToolSet
 import com.aurasight.app.ai.KhataSummary
+import com.aurasight.app.ai.NavigationActionDelegate
+import com.aurasight.app.ai.NavigationToolSet
 import com.aurasight.app.ai.GemmaEngineManager
 import com.aurasight.app.ai.ModelAssetExtractor
+import com.aurasight.app.ui.AppTab
 import com.aurasight.app.ai.RealCartCalculator
 import com.aurasight.app.ai.WhisperEngine
 import kotlinx.coroutines.Dispatchers
@@ -40,7 +43,7 @@ data class ChatMessage(val role: String, val text: String)
  * The ViewModel survives configuration changes (rotation, etc.) so the
  * expensive init only runs once per process lifetime.
  */
-class GemmaViewModel(application: Application) : AndroidViewModel(application), CameraActionDelegate {
+class GemmaViewModel(application: Application) : AndroidViewModel(application), CameraActionDelegate, NavigationActionDelegate {
 
     sealed class State {
         /** Idle — engine not yet requested. Show main UI. */
@@ -85,6 +88,9 @@ class GemmaViewModel(application: Application) : AndroidViewModel(application), 
     val pendingCameraAction = MutableStateFlow<String?>(null)
     var cameraResultDeferred: kotlinx.coroutines.CompletableDeferred<String>? = null
 
+    // Navigation State for UI to observe
+    val currentTab = MutableStateFlow(AppTab.VOICE)
+
     override suspend fun requestCameraAction(action: String): String {
         val deferred = kotlinx.coroutines.CompletableDeferred<String>()
         cameraResultDeferred = deferred
@@ -116,8 +122,9 @@ class GemmaViewModel(application: Application) : AndroidViewModel(application), 
                 
                 val toolSets = listOf(
                     CartToolSet(cartCalculator!!),
+                    CameraToolSet(this@GemmaViewModel),
                     KhataToolSet(db.khataDao()),
-                    CameraToolSet(this@GemmaViewModel)
+                    NavigationToolSet(this@GemmaViewModel)
                 )
                 
                 GemmaEngineManager.initialize(
@@ -157,5 +164,14 @@ class GemmaViewModel(application: Application) : AndroidViewModel(application), 
 
     /** Send a message to Gemma. Only call when state == Ready. */
     suspend fun ask(text: String): String = GemmaEngineManager.ask(text)
+    // ── Navigation Delegate ───────────────────────────────────────────────────
+    override fun navigateTo(tab: String) {
+        val appTab = try {
+            AppTab.valueOf(tab)
+        } catch (e: Exception) {
+            return
+        }
+        currentTab.value = appTab
+    }
 }
 
