@@ -13,6 +13,7 @@ import com.aurasight.app.ai.CartToolSet
 import com.aurasight.app.ai.CameraActionDelegate
 import com.aurasight.app.ai.CameraToolSet
 import com.aurasight.app.ai.KhataToolSet
+import com.aurasight.app.ai.KhataSummary
 import com.aurasight.app.ai.GemmaEngineManager
 import com.aurasight.app.ai.ModelAssetExtractor
 import com.aurasight.app.ai.RealCartCalculator
@@ -21,6 +22,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 
 data class ChatMessage(val role: String, val text: String)
@@ -74,7 +77,11 @@ class GemmaViewModel(application: Application) : AndroidViewModel(application), 
     val cartTotal: StateFlow<Double>
         get() = cartCalculator?.totalState ?: MutableStateFlow(0.0)
 
-    // Camera action state for UI to observe
+    // Khata State
+    val khataSummaries: StateFlow<List<KhataSummary>> = AppDatabase.getInstance(getApplication()).khataDao().getKhataSummaries()
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    // Camera Integration State for UI to observe
     val pendingCameraAction = MutableStateFlow<String?>(null)
     var cameraResultDeferred: kotlinx.coroutines.CompletableDeferred<String>? = null
 

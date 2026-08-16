@@ -25,7 +25,8 @@ import androidx.compose.material3.TopAppBarDefaults
 enum class AppTab(val icon: String, val label: String) {
     VOICE("🎤", "آواز"),      // Voice
     CAMERA("📷", "کیمرہ"),    // Camera
-    CART("🛒", "کھاتہ"),      // Cart
+    CART("🛒", "بل"),         // Cart
+    KHATA("📒", "کھاتہ")      // Khata (Ledger)
 }
 
 /**
@@ -71,6 +72,11 @@ fun MainNavigation(viewModel: GemmaViewModel) {
                             Text("🛒", fontSize = 20.sp)
                         }
                     }
+                    if (selectedTab != AppTab.KHATA) {
+                        IconButton(onClick = { selectedTab = AppTab.KHATA }) {
+                            Text("📒", fontSize = 20.sp)
+                        }
+                    }
                 }
             )
         },
@@ -81,6 +87,7 @@ fun MainNavigation(viewModel: GemmaViewModel) {
                 AppTab.VOICE  -> VoiceScreen(viewModel)
                 AppTab.CAMERA -> CameraScreen(viewModel)
                 AppTab.CART   -> CartScreen(viewModel)
+                AppTab.KHATA  -> KhataScreen(viewModel)
             }
         }
     }

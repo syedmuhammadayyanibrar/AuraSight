@@ -85,8 +85,8 @@ fun CameraScreen(viewModel: GemmaViewModel) {
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     val pendingAction by viewModel.pendingCameraAction.collectAsState()
 
-    fun triggerCapture(action: String?) {
-        if (cameraState != CameraState.IDLE && cameraState != CameraState.DONE) return
+    fun triggerCapture(action: String?, attempt: Int = 1) {
+        if (cameraState != CameraState.IDLE && cameraState != CameraState.DONE && cameraState != CameraState.ANALYZING) return
         val ic = imageCapture ?: return
         cameraState = CameraState.ANALYZING
         description = ""
@@ -106,17 +106,38 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                                 val denominations = listOf("10", "20", "50", "100", "500", "1000", "5000")
                                 val words = visionText.text.split(Regex("\\s+"))
                                 val found = words.filter { it in denominations }
-                                val resultText = if (found.isNotEmpty()) found.joinToString(", ") else "No clear numbers found."
                                 
-                                viewModel.cameraResultDeferred?.complete(resultText)
-                                viewModel.pendingCameraAction.value = null
-                                cameraState = CameraState.DONE
+                                if (found.isNotEmpty()) {
+                                    viewModel.cameraResultDeferred?.complete(found.joinToString(", "))
+                                    viewModel.pendingCameraAction.value = null
+                                    cameraState = CameraState.DONE
+                                } else {
+                                    if (attempt < 3) {
+                                        scope.launch {
+                                            tts?.speak("دوبارہ کوشش کریں", TextToSpeech.QUEUE_FLUSH, null, "retry")
+                                            kotlinx.coroutines.delay(2000)
+                                            triggerCapture(action, attempt + 1)
+                                        }
+                                    } else {
+                                        viewModel.cameraResultDeferred?.complete("No clear numbers found.")
+                                        viewModel.pendingCameraAction.value = null
+                                        cameraState = CameraState.DONE
+                                    }
+                                }
                             }
                             .addOnFailureListener {
                                 proxy.close()
-                                viewModel.cameraResultDeferred?.complete("Analysis failed")
-                                viewModel.pendingCameraAction.value = null
-                                cameraState = CameraState.DONE
+                                if (attempt < 3) {
+                                    scope.launch {
+                                        tts?.speak("دوبارہ کوشش کریں", TextToSpeech.QUEUE_FLUSH, null, "retry")
+                                        kotlinx.coroutines.delay(2000)
+                                        triggerCapture(action, attempt + 1)
+                                    }
+                                } else {
+                                    viewModel.cameraResultDeferred?.complete("Analysis failed")
+                                    viewModel.pendingCameraAction.value = null
+                                    cameraState = CameraState.DONE
+                                }
                             }
                     } else {
                         // SCENE or MANUAL
@@ -127,10 +148,23 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                                 val labelText = labels.take(8).joinToString(", ") { it.text }
                                 
                                 if (action == "SCENE") {
-                                    val resultText = if (labelText.isEmpty()) "Nothing clear seen." else labelText
-                                    viewModel.cameraResultDeferred?.complete(resultText)
-                                    viewModel.pendingCameraAction.value = null
-                                    cameraState = CameraState.DONE
+                                    if (labelText.isEmpty()) {
+                                        if (attempt < 3) {
+                                            scope.launch {
+                                                tts?.speak("دوبارہ کوشش کریں", TextToSpeech.QUEUE_FLUSH, null, "retry")
+                                                kotlinx.coroutines.delay(2000)
+                                                triggerCapture(action, attempt + 1)
+                                            }
+                                        } else {
+                                            viewModel.cameraResultDeferred?.complete("Nothing clear seen.")
+                                            viewModel.pendingCameraAction.value = null
+                                            cameraState = CameraState.DONE
+                                        }
+                                    } else {
+                                        viewModel.cameraResultDeferred?.complete(labelText)
+                                        viewModel.pendingCameraAction.value = null
+                                        cameraState = CameraState.DONE
+                                    }
                                 } else {
                                     // Manual trigger
                                     if (labelText.isEmpty()) {
@@ -155,12 +189,21 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                             .addOnFailureListener {
                                 proxy.close()
                                 if (action == "SCENE") {
-                                    viewModel.cameraResultDeferred?.complete("Analysis failed")
-                                    viewModel.pendingCameraAction.value = null
+                                    if (attempt < 3) {
+                                        scope.launch {
+                                            tts?.speak("دوبارہ کوشش کریں", TextToSpeech.QUEUE_FLUSH, null, "retry")
+                                            kotlinx.coroutines.delay(2000)
+                                            triggerCapture(action, attempt + 1)
+                                        }
+                                    } else {
+                                        viewModel.cameraResultDeferred?.complete("Analysis failed")
+                                        viewModel.pendingCameraAction.value = null
+                                        cameraState = CameraState.DONE
+                                    }
                                 } else {
                                     description = "تجزیہ ناکام"
+                                    cameraState = CameraState.DONE
                                 }
-                                cameraState = CameraState.DONE
                             }
                     }
                 }
@@ -179,6 +222,9 @@ fun CameraScreen(viewModel: GemmaViewModel) {
 
     LaunchedEffect(pendingAction, imageCapture) {
         if (pendingAction != null && imageCapture != null) {
+            cameraState = CameraState.ANALYZING
+            tts?.speak("کیمرہ سامنے رکھیں", TextToSpeech.QUEUE_FLUSH, null, "cam")
+            kotlinx.coroutines.delay(3000)
             triggerCapture(pendingAction)
         }
     }

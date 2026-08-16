@@ -25,4 +25,9 @@ interface KhataDao {
 
     @Query("SELECT DISTINCT customerName FROM khata_entries")
     fun getAllCustomers(): List<String>
+
+    @Query("SELECT customerName, SUM(CASE WHEN type='credit' THEN amount ELSE -amount END) as balance FROM khata_entries GROUP BY customerName")
+    fun getKhataSummaries(): kotlinx.coroutines.flow.Flow<List<KhataSummary>>
 }
+
+data class KhataSummary(val customerName: String, val balance: Double)
