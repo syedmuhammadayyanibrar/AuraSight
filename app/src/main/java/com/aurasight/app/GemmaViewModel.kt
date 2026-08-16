@@ -10,6 +10,9 @@ import com.aurasight.app.ai.AppDatabase
 import com.aurasight.app.ai.CartCalculator
 import com.aurasight.app.ai.CartEntry
 import com.aurasight.app.ai.CartToolSet
+import com.aurasight.app.ai.CameraActionDelegate
+import com.aurasight.app.ai.CameraToolSet
+import com.aurasight.app.ai.KhataToolSet
 import com.aurasight.app.ai.GemmaEngineManager
 import com.aurasight.app.ai.ModelAssetExtractor
 import com.aurasight.app.ai.RealCartCalculator
@@ -34,7 +37,7 @@ data class ChatMessage(val role: String, val text: String)
  * The ViewModel survives configuration changes (rotation, etc.) so the
  * expensive init only runs once per process lifetime.
  */
-class GemmaViewModel(application: Application) : AndroidViewModel(application) {
+class GemmaViewModel(application: Application) : AndroidViewModel(application), CameraActionDelegate {
 
     sealed class State {
         /** Idle — engine not yet requested. Show main UI. */
@@ -71,6 +74,17 @@ class GemmaViewModel(application: Application) : AndroidViewModel(application) {
     val cartTotal: StateFlow<Double>
         get() = cartCalculator?.totalState ?: MutableStateFlow(0.0)
 
+    // Camera action state for UI to observe
+    val pendingCameraAction = MutableStateFlow<String?>(null)
+    var cameraResultDeferred: kotlinx.coroutines.CompletableDeferred<String>? = null
+
+    override suspend fun requestCameraAction(action: String): String {
+        val deferred = kotlinx.coroutines.CompletableDeferred<String>()
+        cameraResultDeferred = deferred
+        pendingCameraAction.value = action
+        return deferred.await()
+    }
+
     /** True once initialize() has been called, so we don't double-init */
     private var initStarted = false
 
@@ -90,12 +104,19 @@ class GemmaViewModel(application: Application) : AndroidViewModel(application) {
 
                 // Step 2 — Initialize the engine
                 _state.value = State.Loading("AI دماغ لوڈ ہو رہا ہے…")
-                val dao = AppDatabase.getInstance(getApplication()).itemDao()
-                cartCalculator = RealCartCalculator(dao)
+                val db = AppDatabase.getInstance(getApplication())
+                cartCalculator = RealCartCalculator(db.itemDao())
+                
+                val toolSets = listOf(
+                    CartToolSet(cartCalculator!!),
+                    KhataToolSet(db.khataDao()),
+                    CameraToolSet(this@GemmaViewModel)
+                )
+                
                 GemmaEngineManager.initialize(
                     context = getApplication(),
                     modelPath = modelPath,
-                    toolSet = CartToolSet(cartCalculator!!)
+                    toolSets = toolSets
                 )
 
                 // Step 3 — Initialize offline Whisper STT (optional — skips if files absent)

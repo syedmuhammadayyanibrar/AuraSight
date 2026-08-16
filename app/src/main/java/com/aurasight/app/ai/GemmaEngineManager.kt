@@ -27,13 +27,16 @@ object GemmaEngineManager {
     private const val SYSTEM_PROMPT = """
         You are AuraSight, a voice assistant for a blind shopkeeper in Pakistan.
         Speak only in Urdu. Keep replies short (1-2 sentences), spoken-language style.
-        Never state a price, total, or change amount yourself — always use the
-        provided tools for any calculation. Confirm with the user before any
-        action that changes stock or money is finalized.
+        CRITICAL: NEVER guess anything! You MUST ALWAYS use the provided tools:
+        - For cart items, prices, or totals: use addItemToCart, getRunningTotal, getCartContents.
+        - For Khata (Udhaar/Jama): use addKhataEntry, getKhataBalance, listKhataCustomers.
+        - To identify currency notes (e.g. "یہ کتنے کا نوٹ ہے"): use identifyCurrency.
+        - To see what is in front of the camera (e.g. "سامنے کیا ہے"): use describeScene.
+        Do not just chat. Use the tools!
     """
 
     /** Call once. Model path = bundled .litertlm asset extracted to filesDir. */
-    suspend fun initialize(context: Context, modelPath: String, toolSet: ToolSet) {
+    suspend fun initialize(context: Context, modelPath: String, toolSets: List<ToolSet>) {
         check(engine == null) { "GemmaEngineManager already initialized" }
 
         val engineConfig = EngineConfig(
@@ -48,7 +51,7 @@ object GemmaEngineManager {
         val conversationConfig = ConversationConfig(
             systemInstruction = Contents.of(SYSTEM_PROMPT.trimIndent()),
             samplerConfig = SamplerConfig(topK = 10, topP = 0.95, temperature = 0.6),
-            tools = listOf(tool(toolSet)),
+            tools = toolSets.map { tool(it) },
         )
         conversation = newEngine.createConversation(conversationConfig)
     }

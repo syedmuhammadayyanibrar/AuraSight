@@ -37,6 +37,13 @@ enum class AppTab(val icon: String, val label: String) {
 fun MainNavigation(viewModel: GemmaViewModel) {
     var selectedTab by remember { mutableStateOf(AppTab.VOICE) }
 
+    val pendingAction by viewModel.pendingCameraAction.collectAsState()
+    LaunchedEffect(pendingAction) {
+        if (pendingAction != null) {
+            selectedTab = AppTab.CAMERA
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(

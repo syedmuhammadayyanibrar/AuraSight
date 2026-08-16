@@ -32,6 +32,8 @@ import com.aurasight.app.GemmaViewModel
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.launch
 import android.speech.tts.TextToSpeech
 import java.util.Locale
@@ -81,6 +83,105 @@ fun CameraScreen(viewModel: GemmaViewModel) {
     var cameraState by remember { mutableStateOf(CameraState.IDLE) }
     var description by remember { mutableStateOf("") }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+    val pendingAction by viewModel.pendingCameraAction.collectAsState()
+
+    fun triggerCapture(action: String?) {
+        if (cameraState != CameraState.IDLE && cameraState != CameraState.DONE) return
+        val ic = imageCapture ?: return
+        cameraState = CameraState.ANALYZING
+        description = ""
+        
+        ic.takePicture(
+            ContextCompat.getMainExecutor(context),
+            object : ImageCapture.OnImageCapturedCallback() {
+                override fun onCaptureSuccess(proxy: ImageProxy) {
+                    val image = InputImage.fromMediaImage(proxy.image!!, proxy.imageInfo.rotationDegrees)
+                    
+                    if (action == "CURRENCY") {
+                        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                        recognizer.process(image)
+                            .addOnSuccessListener { visionText ->
+                                proxy.close()
+                                // Look for Pakistani note numbers
+                                val denominations = listOf("10", "20", "50", "100", "500", "1000", "5000")
+                                val words = visionText.text.split(Regex("\\s+"))
+                                val found = words.filter { it in denominations }
+                                val resultText = if (found.isNotEmpty()) found.joinToString(", ") else "No clear numbers found."
+                                
+                                viewModel.cameraResultDeferred?.complete(resultText)
+                                viewModel.pendingCameraAction.value = null
+                                cameraState = CameraState.DONE
+                            }
+                            .addOnFailureListener {
+                                proxy.close()
+                                viewModel.cameraResultDeferred?.complete("Analysis failed")
+                                viewModel.pendingCameraAction.value = null
+                                cameraState = CameraState.DONE
+                            }
+                    } else {
+                        // SCENE or MANUAL
+                        val labeler = ImageLabeling.getClient(ImageLabelerOptions.Builder().setConfidenceThreshold(0.65f).build())
+                        labeler.process(image)
+                            .addOnSuccessListener { labels ->
+                                proxy.close()
+                                val labelText = labels.take(8).joinToString(", ") { it.text }
+                                
+                                if (action == "SCENE") {
+                                    val resultText = if (labelText.isEmpty()) "Nothing clear seen." else labelText
+                                    viewModel.cameraResultDeferred?.complete(resultText)
+                                    viewModel.pendingCameraAction.value = null
+                                    cameraState = CameraState.DONE
+                                } else {
+                                    // Manual trigger
+                                    if (labelText.isEmpty()) {
+                                        description = "کچھ نظر نہیں آیا"
+                                        cameraState = CameraState.DONE
+                                        return@addOnSuccessListener
+                                    }
+                                    cameraState = CameraState.DESCRIBING
+                                    scope.launch {
+                                        try {
+                                            val prompt = "Camera sees: $labelText. Describe this briefly in Urdu in 1-2 sentences for a blind person."
+                                            description = viewModel.ask(prompt)
+                                            tts?.speak(description, TextToSpeech.QUEUE_FLUSH, null, "desc")
+                                        } catch (e: Exception) {
+                                            description = "خرابی: ${e.message}"
+                                        } finally {
+                                            cameraState = CameraState.DONE
+                                        }
+                                    }
+                                }
+                            }
+                            .addOnFailureListener {
+                                proxy.close()
+                                if (action == "SCENE") {
+                                    viewModel.cameraResultDeferred?.complete("Analysis failed")
+                                    viewModel.pendingCameraAction.value = null
+                                } else {
+                                    description = "تجزیہ ناکام"
+                                }
+                                cameraState = CameraState.DONE
+                            }
+                    }
+                }
+                override fun onError(e: ImageCaptureException) {
+                    if (action != null) {
+                        viewModel.cameraResultDeferred?.complete("Camera error")
+                        viewModel.pendingCameraAction.value = null
+                    } else {
+                        description = "کیمرہ خرابی: ${e.message}"
+                    }
+                    cameraState = CameraState.DONE
+                }
+            }
+        )
+    }
+
+    LaunchedEffect(pendingAction, imageCapture) {
+        if (pendingAction != null && imageCapture != null) {
+            triggerCapture(pendingAction)
+        }
+    }
 
     // ── UI ────────────────────────────────────────────────────────────────────
     Box(
@@ -173,59 +274,7 @@ fun CameraScreen(viewModel: GemmaViewModel) {
 
             // Describe button
             Button(
-                onClick = {
-                    if (cameraState == CameraState.IDLE || cameraState == CameraState.DONE) {
-                        cameraState = CameraState.ANALYZING
-                        description = ""
-                        val ic = imageCapture ?: return@Button
-                        ic.takePicture(
-                            ContextCompat.getMainExecutor(context),
-                            object : ImageCapture.OnImageCapturedCallback() {
-                                override fun onCaptureSuccess(proxy: ImageProxy) {
-                                    val image = InputImage.fromMediaImage(
-                                        proxy.image!!, proxy.imageInfo.rotationDegrees
-                                    )
-                                    val labeler = ImageLabeling.getClient(
-                                        ImageLabelerOptions.Builder()
-                                            .setConfidenceThreshold(0.65f).build()
-                                    )
-                                    labeler.process(image)
-                                        .addOnSuccessListener { labels ->
-                                            proxy.close()
-                                            val labelText = labels.take(8)
-                                                .joinToString(", ") { it.text }
-                                            if (labelText.isEmpty()) {
-                                                description = "کچھ نظر نہیں آیا"
-                                                cameraState = CameraState.DONE
-                                                return@addOnSuccessListener
-                                            }
-                                            cameraState = CameraState.DESCRIBING
-                                            scope.launch {
-                                                try {
-                                                    val prompt = "Camera sees: $labelText. Describe this briefly in Urdu in 1-2 sentences for a blind person."
-                                                    description = viewModel.ask(prompt)
-                                                    tts?.speak(description, TextToSpeech.QUEUE_FLUSH, null, "desc")
-                                                    cameraState = CameraState.DONE
-                                                } catch (e: Exception) {
-                                                    description = "خرابی: ${e.message}"
-                                                    cameraState = CameraState.DONE
-                                                }
-                                            }
-                                        }
-                                        .addOnFailureListener {
-                                            proxy.close()
-                                            description = "تجزیہ ناکام"
-                                            cameraState = CameraState.DONE
-                                        }
-                                }
-                                override fun onError(e: ImageCaptureException) {
-                                    description = "کیمرہ خرابی: ${e.message}"
-                                    cameraState = CameraState.DONE
-                                }
-                            }
-                        )
-                    }
-                },
+                onClick = { triggerCapture(null) },
                 enabled = cameraState == CameraState.IDLE || cameraState == CameraState.DONE,
                 modifier = Modifier.size(80.dp).clip(CircleShape),
                 colors = ButtonDefaults.buttonColors(
