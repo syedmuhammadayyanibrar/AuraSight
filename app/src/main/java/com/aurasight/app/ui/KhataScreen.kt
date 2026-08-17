@@ -30,14 +30,14 @@ fun KhataScreen(viewModel: GemmaViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0D1117))
+            .background(Color.White)
             .padding(24.dp)
     ) {
         Text(
             "کھاتہ (Ledger)",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFFE6EDF3),
+            color = Color(0xFF111827),
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
@@ -49,7 +49,7 @@ fun KhataScreen(viewModel: GemmaViewModel) {
                 Text(
                     "کوئی کھاتہ نہیں\n(No ledger entries)",
                     fontSize = 16.sp,
-                    color = Color(0xFF8B949E),
+                    color = Color(0xFF6B7280),
                     modifier = Modifier.align(Alignment.Center)
                 )
             }
@@ -59,12 +59,12 @@ fun KhataScreen(viewModel: GemmaViewModel) {
                     .weight(1f)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF161B22))
+                    .background(Color(0xFFF3F4F6))
                     .padding(16.dp)
             ) {
                 items(summaries) { summary ->
                     KhataSummaryRow(summary)
-                    Divider(color = Color(0xFF30363D), modifier = Modifier.padding(vertical = 8.dp))
+                    Divider(color = Color(0xFFE5E7EB), modifier = Modifier.padding(vertical = 8.dp))
                 }
             }
         }
@@ -76,7 +76,7 @@ fun KhataScreen(viewModel: GemmaViewModel) {
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFF8B0000))
+                .background(Color(0xFFDC2626))
                 .padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -94,14 +94,14 @@ fun KhataSummaryRow(summary: KhataSummary) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(summary.customerName, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE6EDF3))
+        Text(summary.customerName, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
         
-        val color = if (summary.balance > 0) Color(0xFFF85149) else Color(0xFF3FB950)
+        val color = if (summary.balance > 0) Color(0xFFDC2626) else Color(0xFF16A34A)
         val prefix = if (summary.balance > 0) "Udhaar:" else "Jama:"
         val displayAmount = Math.abs(summary.balance)
         
         Column(horizontalAlignment = Alignment.End) {
-            Text(prefix, fontSize = 12.sp, color = Color(0xFF8B949E))
+            Text(prefix, fontSize = 12.sp, color = Color(0xFF6B7280))
             Text("Rs. ${"%.2f".format(displayAmount)}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = color)
         }
     }

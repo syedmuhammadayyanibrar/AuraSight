@@ -52,11 +52,7 @@ fun SplashScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(Color(0xFF0D1117), Color(0xFF161B22))
-                )
-            ),
+            .background(Color.White),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -73,7 +69,7 @@ fun SplashScreen(
                         .scale(scale)
                         .clip(CircleShape)
                         .background(
-                            Color(0xFF58A6FF).copy(alpha = ringAlpha * 0.25f)
+                            Color(0xFF3B82F6).copy(alpha = ringAlpha * 0.2f)
                         )
                 )
                 // Inner filled circle
@@ -83,7 +79,7 @@ fun SplashScreen(
                         .clip(CircleShape)
                         .background(
                             Brush.radialGradient(
-                                listOf(Color(0xFF58A6FF), Color(0xFF1F6FEB))
+                                listOf(Color(0xFF60A5FA), Color(0xFF2563EB))
                             )
                         ),
                     contentAlignment = Alignment.Center
@@ -101,13 +97,13 @@ fun SplashScreen(
                     text = "AuraSight",
                     fontSize = 32.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFFE6EDF3),
+                    color = Color(0xFF2563EB),
                     letterSpacing = 1.sp
                 )
                 Text(
                     text = "آپ کا ذہین ساتھی",   // "Your intelligent companion"
                     fontSize = 14.sp,
-                    color = Color(0xFF8B949E),
+                    color = Color(0xFF6B7280),
                     textAlign = TextAlign.Center
                 )
             }
@@ -125,8 +121,8 @@ fun SplashScreen(
                             .fillMaxWidth()
                             .height(4.dp)
                             .clip(CircleShape),
-                        color = Color(0xFF58A6FF),
-                        trackColor = Color(0xFF30363D),
+                        color = Color(0xFF2563EB),
+                        trackColor = Color(0xFFE5E7EB),
                     )
                 } else {
                     LinearProgressIndicator(
@@ -134,18 +130,19 @@ fun SplashScreen(
                             .fillMaxWidth()
                             .height(4.dp)
                             .clip(CircleShape),
-                        color = Color(0xFF58A6FF),
-                        trackColor = Color(0xFF30363D),
+                        color = Color(0xFF2563EB),
+                        trackColor = Color(0xFFE5E7EB),
                     )
                 }
 
                 Text(
                     text = statusText,
                     fontSize = 13.sp,
-                    color = Color(0xFF8B949E),
+                    color = Color(0xFF6B7280),
                     textAlign = TextAlign.Center
                 )
             }
         }
     }
 }
+

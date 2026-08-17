@@ -78,7 +78,18 @@ fun CameraScreen(viewModel: GemmaViewModel) {
             ContextCompat.getMainExecutor(context),
             object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(proxy: ImageProxy) {
-                    val bitmap = proxy.toBitmap()
+                    val rawBitmap = proxy.toBitmap()
+                    // Scale down to prevent exceeding max OpenGL texture size
+                    val maxDim = 800f
+                    val scale = kotlin.math.min(maxDim / rawBitmap.width, maxDim / rawBitmap.height)
+                    val bitmap = if (scale < 1f) {
+                        android.graphics.Bitmap.createScaledBitmap(
+                            rawBitmap,
+                            (rawBitmap.width * scale).toInt(),
+                            (rawBitmap.height * scale).toInt(),
+                            true
+                        )
+                    } else rawBitmap
                     viewModel.latestCameraBitmap = bitmap
                     val image = InputImage.fromMediaImage(proxy.image!!, proxy.imageInfo.rotationDegrees)
                     
@@ -152,22 +163,27 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                                     }
                                 } else {
                                     // Manual trigger
-                                    if (labelText.isEmpty()) {
-                                        description = "کچھ نظر نہیں آیا"
-                                        cameraState = CameraState.DONE
-                                        return@addOnSuccessListener
-                                    }
-                                    cameraState = CameraState.DESCRIBING
-                                    scope.launch {
-                                        try {
-                                            val prompt = "Camera sees: $labelText. Describe this briefly in Urdu in 1-2 sentences for a blind person."
-                                            description = viewModel.askAndSpeak(prompt, addToHistory = false)
-                                        } catch (e: Exception) {
-                                            description = "خرابی: ${e.message}"
-                                        } finally {
-                                            cameraState = CameraState.DONE
+                                    val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                                    recognizer.process(image)
+                                        .addOnSuccessListener { visionText ->
+                                            val textFound = visionText.text.take(200)
+                                            viewModel.pendingCameraContext = "Labels: $labelText. Text in image: $textFound"
+                                            
+                                            // Put picture in chat & navigate to Voice
+                                            viewModel.addMessage("user", "", viewModel.latestCameraBitmap)
+                                            viewModel.latestCameraBitmap = null
+                                            viewModel.navigateTo("VOICE")
+                                            cameraState = CameraState.IDLE
                                         }
-                                    }
+                                        .addOnFailureListener {
+                                            viewModel.pendingCameraContext = "Labels: $labelText. Text: (failed)"
+                                            
+                                            // Put picture in chat & navigate to Voice
+                                            viewModel.addMessage("user", "", viewModel.latestCameraBitmap)
+                                            viewModel.latestCameraBitmap = null
+                                            viewModel.navigateTo("VOICE")
+                                            cameraState = CameraState.IDLE
+                                        }
                                 }
                             }
                             .addOnFailureListener {
@@ -185,8 +201,11 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                                         cameraState = CameraState.DONE
                                     }
                                 } else {
-                                    description = "تجزیہ ناکام"
-                                    cameraState = CameraState.DONE
+                                    viewModel.pendingCameraContext = "(Failed to analyze image)"
+                                    viewModel.addMessage("user", "", viewModel.latestCameraBitmap)
+                                    viewModel.latestCameraBitmap = null
+                                    viewModel.navigateTo("VOICE")
+                                    cameraState = CameraState.IDLE
                                 }
                             }
                     }
@@ -217,7 +236,7 @@ fun CameraScreen(viewModel: GemmaViewModel) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0D1117))
+            .background(Color.White)
     ) {
         if (!hasCameraPermission) {
             // Permission screen
@@ -229,13 +248,13 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                 Text("📷", fontSize = 56.sp)
                 Spacer(Modifier.height(16.dp))
                 Text("کیمرہ اجازت ضروری ہے", fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold, color = Color(0xFFE6EDF3),
+                    fontWeight = FontWeight.Bold, color = Color(0xFF111827),
                     textAlign = TextAlign.Center)
                 Spacer(Modifier.height(24.dp))
                 Button(
                     onClick = { permLauncher.launch(Manifest.permission.CAMERA) },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1F6FEB))
-                ) { Text("اجازت دیں →", fontSize = 16.sp) }
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                ) { Text("اجازت دیں →", fontSize = 16.sp, color = Color.White) }
             }
             return
         }
@@ -270,7 +289,7 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                 .align(Alignment.BottomCenter)
                 .background(
                     Brush.verticalGradient(
-                        listOf(Color.Transparent, Color(0xE6000000))
+                        listOf(Color.Transparent, Color(0x66FFFFFF), Color.White)
                     )
                 )
                 .padding(24.dp),
@@ -283,11 +302,23 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF0D419D).copy(alpha = 0.85f))
+                        .background(Color(0xFFEFF6FF).copy(alpha = 0.85f))
                         .padding(16.dp)
                 ) {
                     Text(description, fontSize = 15.sp,
-                        color = Color(0xFF79C0FF), lineHeight = 22.sp)
+                        color = Color(0xFF2563EB), lineHeight = 22.sp)
+                }
+            }
+
+            if (cameraState == CameraState.ANALYZING) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFE5E7EB).copy(alpha = 0.85f), RoundedCornerShape(12.dp))
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("AI تصویر دیکھ رہی ہے...", fontSize = 18.sp, color = Color(0xFF2563EB), fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -299,7 +330,7 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                     CameraState.DESCRIBING -> "AuraSight بتا رہا ہے…"
                     CameraState.DONE       -> "دوبارہ دیکھنے کے لیے دبائیں"
                 },
-                fontSize = 14.sp, color = Color(0xFF8B949E)
+                fontSize = 14.sp, color = Color(0xFF4B5563)
             )
 
             // Describe button
@@ -309,8 +340,8 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                 modifier = Modifier.size(80.dp).clip(CircleShape),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = when (cameraState) {
-                        CameraState.IDLE, CameraState.DONE -> Color(0xFF1F6FEB)
-                        else -> Color(0xFF6E7681)
+                        CameraState.IDLE, CameraState.DONE -> Color(0xFF2563EB)
+                        else -> Color(0xFF9CA3AF)
                     }
                 ),
                 contentPadding = PaddingValues(0.dp)
@@ -318,9 +349,10 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                 Text(
                     text = when (cameraState) {
                         CameraState.ANALYZING, CameraState.DESCRIBING -> "⏳"
-                        else -> "👁"
+                        else -> "📷"
                     },
-                    fontSize = 32.sp
+                    fontSize = 32.sp,
+                    color = Color.White
                 )
             }
         }

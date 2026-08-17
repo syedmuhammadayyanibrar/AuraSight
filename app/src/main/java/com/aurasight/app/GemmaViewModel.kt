@@ -124,6 +124,8 @@ class GemmaViewModel(application: Application) : AndroidViewModel(application), 
     // Navigation State for UI to observe
     val currentTab = MutableStateFlow(AppTab.VOICE)
 
+    var pendingCameraContext: String? = null
+
     override suspend fun requestCameraAction(action: String): String {
         val deferred = kotlinx.coroutines.CompletableDeferred<String>()
         cameraResultDeferred = deferred
@@ -271,13 +273,19 @@ class GemmaViewModel(application: Application) : AndroidViewModel(application), 
                 var promptText = text
                 var cameraAction = ""
                 
-                if (sceneTriggers.any { text.contains(it) }) {
+                if (pendingCameraContext != null) {
+                    promptText = "Image context: $pendingCameraContext. User asked: '$text'. Answer the user's question briefly in Urdu."
+                    pendingCameraContext = null
+                    addMessage("user", text)
+                } else if (sceneTriggers.any { text.contains(it) }) {
                     cameraAction = "SCENE"
                 } else if (currencyTriggers.any { text.contains(it) }) {
                     cameraAction = "CURRENCY"
                 }
                 
-                addMessage("user", text)
+                if (cameraAction.isEmpty() && pendingCameraContext == null) {
+                    addMessage("user", text)
+                }
                 
                 if (cameraAction.isNotEmpty()) {
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {

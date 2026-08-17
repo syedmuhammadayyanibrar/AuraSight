@@ -73,11 +73,15 @@ class MainActivity : ComponentActivity() {
             return
         }
 
+        LaunchedEffect(Unit) {
+            gemmaViewModel.ensureInitialized()
+        }
+        
         // --- Normal app flow ---
         val gemmaState by gemmaViewModel.state.collectAsStateWithLifecycle()
 
         when (val state = gemmaState) {
-            GemmaViewModel.State.Idle          -> MainScreen(gemmaViewModel)
+            GemmaViewModel.State.Idle          -> SplashScreen(statusText = "AuraSight...")
             is GemmaViewModel.State.Extracting -> SplashScreen(statusText = state.statusText)
             is GemmaViewModel.State.Loading    -> SplashScreen(statusText = state.statusText)
             is GemmaViewModel.State.Error      -> ErrorScreen(state.message) { gemmaViewModel.ensureInitialized() }
@@ -134,7 +138,7 @@ fun PermissionScreen(onGrant: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFF0D1117), Color(0xFF161B22)))),
+            .background(Color.White),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -145,77 +149,42 @@ fun PermissionScreen(onGrant: () -> Unit) {
             Text("📁", fontSize = 56.sp)
 
             Text(
-                text = "فائل رسائی ضروری ہے",   // "File access is required"
+                text = "فائل رسائی ضروری ہے",
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFFE6EDF3),
+                color = Color(0xFF111827),
                 textAlign = TextAlign.Center
             )
 
             Text(
                 text = "AuraSight کو /sdcard/ میں رکھے ہوئے AI ماڈل تک پہنچنے کے لیے\n\"تمام فائلوں تک رسائی\" کی اجازت چاہیے۔",
-                // "AuraSight needs 'All files access' permission to reach the AI model in /sdcard/"
                 fontSize = 14.sp,
-                color = Color(0xFF8B949E),
+                color = Color(0xFF4B5563),
                 textAlign = TextAlign.Center,
                 lineHeight = 22.sp
             )
 
             Text(
                 text = "اگلی اسکرین پر AuraSight تلاش کریں اور اجازت دیں۔",
-                // "On the next screen, find AuraSight and grant permission."
                 fontSize = 13.sp,
-                color = Color(0xFF484F58),
+                color = Color(0xFF6B7280),
                 textAlign = TextAlign.Center,
                 lineHeight = 20.sp
             )
 
             Button(
                 onClick = onGrant,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1F6FEB)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "اجازت دیں  →",    // "Grant permission →"
+                    text = "اجازت دیں  →",
                     fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
                 )
             }
         }
-    }
-}
-
-// ── Main screen ────────────────────────────────────────────────────────────────
-@Composable
-fun MainScreen(viewModel: GemmaViewModel) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFF0D1117), Color(0xFF161B22)))),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(32.dp),
-            modifier = Modifier.padding(32.dp)
-        ) {
-            Text("AuraSight", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE6EDF3))
-            Text("بات کریں", fontSize = 16.sp, color = Color(0xFF8B949E))
-            MicButton("🎤") { viewModel.ensureInitialized() }
-            Text("مائیک کا بٹن دبائیں اور بولیں", fontSize = 13.sp, color = Color(0xFF484F58), textAlign = TextAlign.Center)
-        }
-    }
-}
-
-@Composable
-fun MicButton(label: String, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier.size(100.dp).clip(CircleShape),
-        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1F6FEB)),
-        contentPadding = PaddingValues(0.dp)
-    ) {
-        Text(label, fontSize = 40.sp)
     }
 }
 
@@ -223,7 +192,7 @@ fun MicButton(label: String, onClick: () -> Unit) {
 @Composable
 fun ErrorScreen(message: String, onRetry: () -> Unit) {
     Box(
-        modifier = Modifier.fillMaxSize().background(Color(0xFF0D1117)),
+        modifier = Modifier.fillMaxSize().background(Color.White),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -232,10 +201,10 @@ fun ErrorScreen(message: String, onRetry: () -> Unit) {
             modifier = Modifier.padding(32.dp)
         ) {
             Text("⚠️", fontSize = 48.sp)
-            Text("خرابی آ گئی", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFF7B72))
-            Text(message, fontSize = 13.sp, color = Color(0xFF8B949E), textAlign = TextAlign.Center)
-            Button(onClick = onRetry, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1F6FEB))) {
-                Text("دوبارہ کوشش کریں")
+            Text("خرابی آ گئی", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFFDC2626))
+            Text(message, fontSize = 13.sp, color = Color(0xFF4B5563), textAlign = TextAlign.Center)
+            Button(onClick = onRetry, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))) {
+                Text("دوبارہ کوشش کریں", color = Color.White)
             }
         }
     }

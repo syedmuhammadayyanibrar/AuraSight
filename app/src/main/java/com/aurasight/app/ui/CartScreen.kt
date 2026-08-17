@@ -28,14 +28,14 @@ fun CartScreen(viewModel: GemmaViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0D1117))
+            .background(Color.White)
             .padding(24.dp)
     ) {
         Text(
             "کھاتہ (Khata)",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFFE6EDF3),
+            color = Color(0xFF111827),
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
@@ -47,7 +47,7 @@ fun CartScreen(viewModel: GemmaViewModel) {
                 Text(
                     "کھاتہ خالی ہے\n(Cart is empty)",
                     fontSize = 16.sp,
-                    color = Color(0xFF8B949E),
+                    color = Color(0xFF6B7280),
                     modifier = Modifier.align(Alignment.Center)
                 )
             }
@@ -57,12 +57,12 @@ fun CartScreen(viewModel: GemmaViewModel) {
                     .weight(1f)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF161B22))
+                    .background(Color(0xFFF3F4F6))
                     .padding(16.dp)
             ) {
                 items(entries) { entry ->
                     CartEntryRow(entry)
-                    Divider(color = Color(0xFF30363D), modifier = Modifier.padding(vertical = 8.dp))
+                    Divider(color = Color(0xFFE5E7EB), modifier = Modifier.padding(vertical = 8.dp))
                 }
             }
         }
@@ -74,7 +74,7 @@ fun CartScreen(viewModel: GemmaViewModel) {
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFF238636))
+                .background(Color(0xFF2563EB))
                 .padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -93,9 +93,9 @@ fun CartEntryRow(entry: CartEntry) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column {
-            Text(entry.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE6EDF3))
-            Text("${entry.quantity} x Rs.${"%.2f".format(entry.price)}", fontSize = 14.sp, color = Color(0xFF8B949E))
+            Text(entry.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+            Text("${entry.quantity} x Rs.${"%.2f".format(entry.price)}", fontSize = 14.sp, color = Color(0xFF6B7280))
         }
-        Text("Rs. ${"%.2f".format(entry.lineTotal)}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE6EDF3))
+        Text("Rs. ${"%.2f".format(entry.lineTotal)}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF111827))
     }
 }

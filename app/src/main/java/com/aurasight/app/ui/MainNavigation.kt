@@ -46,25 +46,7 @@ fun MainNavigation(viewModel: GemmaViewModel) {
     }
 
     Scaffold(
-        topBar = {
-            if (selectedTab != AppTab.VOICE) {
-                TopAppBar(
-                    title = { 
-                        Text(selectedTab.label, fontWeight = FontWeight.Bold, color = Color(0xFFE6EDF3), fontSize = 20.sp) 
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = { viewModel.currentTab.value = AppTab.VOICE }) {
-                            Text("⬅️", fontSize = 20.sp)
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color(0xFF161B22),
-                        titleContentColor = Color(0xFFE6EDF3)
-                    )
-                )
-            }
-        },
-        containerColor = Color(0xFF0D1117)
+        containerColor = Color.White
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
             when (selectedTab) {
