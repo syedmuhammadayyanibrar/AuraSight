@@ -47,49 +47,21 @@ fun MainNavigation(viewModel: GemmaViewModel) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { 
-                    Text("AuraSight", fontWeight = FontWeight.Bold, color = Color(0xFFE6EDF3), fontSize = 20.sp) 
-                },
-                navigationIcon = {
-                    if (selectedTab != AppTab.VOICE) {
+            if (selectedTab != AppTab.VOICE) {
+                TopAppBar(
+                    title = { 
+                        Text(selectedTab.label, fontWeight = FontWeight.Bold, color = Color(0xFFE6EDF3), fontSize = 20.sp) 
+                    },
+                    navigationIcon = {
                         IconButton(onClick = { viewModel.currentTab.value = AppTab.VOICE }) {
                             Text("⬅️", fontSize = 20.sp)
                         }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF161B22),
-                    titleContentColor = Color(0xFFE6EDF3)
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color(0xFF161B22),
+                        titleContentColor = Color(0xFFE6EDF3)
+                    )
                 )
-            )
-        },
-        bottomBar = {
-            // Hide bottom bar when inside Camera or Cart
-            if (selectedTab == AppTab.VOICE || selectedTab == AppTab.CART || selectedTab == AppTab.KHATA) {
-                NavigationBar(
-                    containerColor = Color(0xFF161B22),
-                    contentColor = Color(0xFF8B949E)
-                ) {
-                    NavigationBarItem(
-                        selected = selectedTab == AppTab.CART,
-                        onClick = { viewModel.currentTab.value = AppTab.CART },
-                        icon = { Text("🛒", fontSize = 24.sp) },
-                        label = { Text("بل") }
-                    )
-                    NavigationBarItem(
-                        selected = selectedTab == AppTab.VOICE,
-                        onClick = { viewModel.currentTab.value = AppTab.VOICE },
-                        icon = { Text("🎙️", fontSize = 24.sp) },
-                        label = { Text("Voice") }
-                    )
-                    NavigationBarItem(
-                        selected = selectedTab == AppTab.KHATA,
-                        onClick = { viewModel.currentTab.value = AppTab.KHATA },
-                        icon = { Text("📒", fontSize = 24.sp) },
-                        label = { Text("کھاتہ") }
-                    )
-                }
             }
         },
         containerColor = Color(0xFF0D1117)
