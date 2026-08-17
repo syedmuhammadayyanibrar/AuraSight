@@ -6,11 +6,11 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
-import android.speech.tts.TextToSpeech
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -61,28 +62,8 @@ private const val SAMPLE_RATE = 16_000
 fun VoiceScreen(viewModel: GemmaViewModel) {
     val context = LocalContext.current
     val scope   = rememberCoroutineScope()
-
-    // ── TTS setup ─────────────────────────────────────────────────────────────
-    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
-    DisposableEffect(Unit) {
-        lateinit var t: TextToSpeech
-        t = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                val result = t.setLanguage(Locale("ur", "PK"))
-                if (result == TextToSpeech.LANG_MISSING_DATA ||
-                    result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    t.language = Locale.getDefault()
-                    Log.w("AuraSight/TTS", "Urdu pack missing — using ${t.language}")
-                } else {
-                    Log.d("AuraSight/TTS", "TTS ready — ur-PK")
-                }
-                tts = t   // ← set ONLY after init succeeds (fixes silent-TTS race)
-            } else {
-                Log.e("AuraSight/TTS", "TTS init failed, status=$status")
-            }
-        }
-        onDispose { t.stop(); t.shutdown() }
-    }
+    
+    val isProcessing by viewModel.isProcessing.collectAsState()
 
     // ── State ─────────────────────────────────────────────────────────────────
     var voiceState   by remember { mutableStateOf(VoiceState.IDLE) }
@@ -108,6 +89,7 @@ fun VoiceScreen(viewModel: GemmaViewModel) {
 
     // ── Start recording ───────────────────────────────────────────────────────
     fun startRecording() {
+        if (isProcessing) return
         if (!hasMicPermission) { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO); return }
 
         errorText = ""; gemmaResponse = ""; spokenText = ""
@@ -177,22 +159,26 @@ fun VoiceScreen(viewModel: GemmaViewModel) {
                 return@launch
             }
 
-            viewModel.addMessage("user", text)
             Log.d("AuraSight/STT", "Whisper → '$text'")
-
-            try {
-                val response = withContext(Dispatchers.IO) { viewModel.ask(text) }
-                viewModel.addMessage("ai", response)
-                voiceState = VoiceState.RESPONDING
-                Log.d("AuraSight/TTS", "speak() → '${response.take(80)}'")
-                if (tts != null) {
-                    tts!!.speak(response, TextToSpeech.QUEUE_FLUSH, null, "reply")
-                } else {
-                    Log.w("AuraSight/TTS", "speak() skipped — TTS not ready yet")
+            
+            voiceState = VoiceState.IDLE // Will be overridden by isProcessing in UI
+            viewModel.processVoiceCommand(
+                text = text,
+                onSuccess = { voiceState = VoiceState.RESPONDING },
+                onError = { errorMsg ->
+                    errorText = errorMsg
+                    voiceState = VoiceState.IDLE
                 }
-            } catch (e: Exception) {
-                errorText = e.message ?: "Gemma خرابی"
-                voiceState = VoiceState.IDLE
+            )
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.hardwareMicTrigger.collect {
+            when (voiceState) {
+                VoiceState.LISTENING -> stopAndTranscribe()
+                VoiceState.IDLE, VoiceState.RESPONDING -> startRecording()
+                else -> {}
             }
         }
     }
@@ -251,7 +237,8 @@ fun VoiceScreen(viewModel: GemmaViewModel) {
                         label = if (isUser) "آپ:" else "AuraSight:",
                         text = msg.text,
                         bgColor = if (isUser) Color(0xFF238636) else Color(0xFF21262D),
-                        textColor = Color(0xFFE6EDF3)
+                        textColor = Color(0xFFE6EDF3),
+                        imageBitmap = msg.imageBitmap
                     )
                 }
             }
@@ -277,11 +264,13 @@ fun VoiceScreen(viewModel: GemmaViewModel) {
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = when (voiceState) {
-                        VoiceState.IDLE       -> if (hasMicPermission) "بولنے کے لیے دبائیں" else "مائیک کی اجازت دیں"
-                        VoiceState.LISTENING  -> "سن رہا ہوں… (روکنے کے لیے دبائیں)"
-                        VoiceState.THINKING   -> "سوچ رہا ہوں…"
-                        VoiceState.RESPONDING -> "جواب:"
+                    text = when {
+                        isProcessing -> "سوچ رہا ہوں…"
+                        voiceState == VoiceState.IDLE -> if (hasMicPermission) "بولنے کے لیے دبائیں" else "مائیک کی اجازت دیں"
+                        voiceState == VoiceState.LISTENING -> "سن رہا ہوں… (روکنے کے لیے دبائیں)"
+                        voiceState == VoiceState.THINKING -> "سوچ رہا ہوں…"
+                        voiceState == VoiceState.RESPONDING -> "جواب:"
+                        else -> ""
                     },
                     fontSize = 14.sp,
                     color = Color(0xFF8B949E),
@@ -305,16 +294,17 @@ fun VoiceScreen(viewModel: GemmaViewModel) {
                             VoiceState.THINKING   -> {}
                         }
                     },
-                    enabled  = voiceState != VoiceState.THINKING,
+                    enabled  = voiceState != VoiceState.THINKING && !isProcessing,
                     modifier = Modifier.size(72.dp).scale(btnScale).clip(CircleShape),
                     colors   = ButtonDefaults.buttonColors(containerColor = btnColor),
                     contentPadding = PaddingValues(0.dp)
                 ) {
                     Text(
-                        text = when (voiceState) {
-                            VoiceState.LISTENING -> "⏹"
-                            VoiceState.THINKING  -> "⏳"
-                            else                 -> "🎤"
+                        text = when {
+                            isProcessing -> "⏳"
+                            voiceState == VoiceState.LISTENING -> "⏹"
+                            voiceState == VoiceState.THINKING -> "⏳"
+                            else -> "🎤"
                         },
                         fontSize = 32.sp
                     )
@@ -325,7 +315,7 @@ fun VoiceScreen(viewModel: GemmaViewModel) {
 }
 
 @Composable
-private fun ResponseBubble(label: String, text: String, bgColor: Color, textColor: Color) {
+private fun ResponseBubble(label: String, text: String, bgColor: Color, textColor: Color, imageBitmap: android.graphics.Bitmap? = null) {
     Column(
         modifier = Modifier
             .widthIn(max = 280.dp)
@@ -340,6 +330,18 @@ private fun ResponseBubble(label: String, text: String, bgColor: Color, textColo
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(label, fontSize = 11.sp, color = Color.White.copy(alpha=0.6f), fontWeight = FontWeight.SemiBold)
+        imageBitmap?.let { bmp ->
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = "Captured image",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 200.dp)
+                    .padding(bottom = 8.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+            )
+        }
         Text(text, fontSize = 15.sp, color = textColor, lineHeight = 22.sp)
     }
 }

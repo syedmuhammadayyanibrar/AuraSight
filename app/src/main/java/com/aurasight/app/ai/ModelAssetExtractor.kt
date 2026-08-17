@@ -55,14 +55,24 @@ object ModelAssetExtractor {
      *  Falls back to extracting from assets if bundled there instead. */
     private fun resolveFromSdcardOrAssets(context: Context, name: String): String {
         val sdcardFile = File(Environment.getExternalStorageDirectory(), name)
-        if (sdcardFile.exists()) return sdcardFile.absolutePath
+        
+        // Guard against corrupted 0-byte or incomplete adb push transfers 
+        // that cause native C++ segfaults.
+        val minSize = if (name.endsWith(".txt") || name.endsWith(".json")) 100L else 1_000_000L
+        
+        if (sdcardFile.exists() && sdcardFile.length() > minSize) {
+            return sdcardFile.absolutePath
+        }
 
         val outFile = File(context.filesDir, name)
-        if (!outFile.exists()) {
-            context.assets.open(name).use { input ->
-                outFile.outputStream().use { output -> input.copyTo(output) }
-            }
+        if (outFile.exists() && outFile.length() > minSize) {
+            return outFile.absolutePath
         }
+
+        context.assets.open(name).use { input ->
+            outFile.outputStream().use { output -> input.copyTo(output) }
+        }
+        
         return outFile.absolutePath
     }
 }

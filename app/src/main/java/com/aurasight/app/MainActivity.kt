@@ -87,6 +87,45 @@ class MainActivity : ComponentActivity() {
 
     private fun hasStoragePermission(): Boolean =
         android.os.Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager()
+
+    // --- Hardware Button Overrides ---
+    private var volumeDownPressCount = 0
+    private var lastVolumeDownPressTime = 0L
+    private val MULTI_PRESS_TIMEOUT = 500L
+
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {
+        if (keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP) {
+            if (event?.repeatCount == 0) {
+                gemmaViewModel.processHardwareCameraTrigger()
+            }
+            return true
+        } else if (keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN) {
+            if (event?.repeatCount == 0) {
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - lastVolumeDownPressTime > MULTI_PRESS_TIMEOUT) {
+                    volumeDownPressCount = 1
+                } else {
+                    volumeDownPressCount++
+                }
+                lastVolumeDownPressTime = currentTime
+                
+                if (volumeDownPressCount == 3) {
+                    volumeDownPressCount = 0
+                    gemmaViewModel.speakStatus("مائیک آن")
+                    gemmaViewModel.hardwareMicTrigger.tryEmit(Unit)
+                }
+            }
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent?): Boolean {
+        if (keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP || keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN) {
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
+    }
 }
 
 // ── Permission request screen ──────────────────────────────────────────────────

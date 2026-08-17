@@ -35,9 +35,6 @@ import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.launch
-import android.speech.tts.TextToSpeech
-import java.util.Locale
-
 enum class CameraState { IDLE, ANALYZING, DESCRIBING, DONE }
 
 /**
@@ -63,21 +60,7 @@ fun CameraScreen(viewModel: GemmaViewModel) {
     ) { hasCameraPermission = it }
 
     // ── TTS ───────────────────────────────────────────────────────────────────
-    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
-    DisposableEffect(Unit) {
-        lateinit var t: TextToSpeech
-        t = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                val result = t.setLanguage(Locale("ur", "PK"))
-                if (result == TextToSpeech.LANG_MISSING_DATA ||
-                    result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    t.language = Locale.getDefault()
-                }
-            }
-        }
-        tts = t
-        onDispose { t.stop(); t.shutdown() }
-    }
+    // TTS is now centralized in GemmaViewModel.
 
     // ── State ─────────────────────────────────────────────────────────────────
     var cameraState by remember { mutableStateOf(CameraState.IDLE) }
@@ -95,6 +78,8 @@ fun CameraScreen(viewModel: GemmaViewModel) {
             ContextCompat.getMainExecutor(context),
             object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(proxy: ImageProxy) {
+                    val bitmap = proxy.toBitmap()
+                    viewModel.latestCameraBitmap = bitmap
                     val image = InputImage.fromMediaImage(proxy.image!!, proxy.imageInfo.rotationDegrees)
                     
                     if (action == "CURRENCY") {
@@ -114,7 +99,7 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                                 } else {
                                     if (attempt < 3) {
                                         scope.launch {
-                                            tts?.speak("دوبارہ کوشش کریں", TextToSpeech.QUEUE_FLUSH, null, "retry")
+                                            viewModel.speakStatus("دوبارہ کوشش کریں")
                                             kotlinx.coroutines.delay(2000)
                                             triggerCapture(action, attempt + 1)
                                         }
@@ -129,7 +114,7 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                                 proxy.close()
                                 if (attempt < 3) {
                                     scope.launch {
-                                        tts?.speak("دوبارہ کوشش کریں", TextToSpeech.QUEUE_FLUSH, null, "retry")
+                                        viewModel.speakStatus("دوبارہ کوشش کریں")
                                         kotlinx.coroutines.delay(2000)
                                         triggerCapture(action, attempt + 1)
                                     }
@@ -151,7 +136,7 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                                     if (labelText.isEmpty()) {
                                         if (attempt < 3) {
                                             scope.launch {
-                                                tts?.speak("دوبارہ کوشش کریں", TextToSpeech.QUEUE_FLUSH, null, "retry")
+                                                viewModel.speakStatus("دوبارہ کوشش کریں")
                                                 kotlinx.coroutines.delay(2000)
                                                 triggerCapture(action, attempt + 1)
                                             }
@@ -176,8 +161,7 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                                     scope.launch {
                                         try {
                                             val prompt = "Camera sees: $labelText. Describe this briefly in Urdu in 1-2 sentences for a blind person."
-                                            description = viewModel.ask(prompt)
-                                            tts?.speak(description, TextToSpeech.QUEUE_FLUSH, null, "desc")
+                                            description = viewModel.askAndSpeak(prompt, addToHistory = false)
                                         } catch (e: Exception) {
                                             description = "خرابی: ${e.message}"
                                         } finally {
@@ -191,7 +175,7 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                                 if (action == "SCENE") {
                                     if (attempt < 3) {
                                         scope.launch {
-                                            tts?.speak("دوبارہ کوشش کریں", TextToSpeech.QUEUE_FLUSH, null, "retry")
+                                            viewModel.speakStatus("دوبارہ کوشش کریں")
                                             kotlinx.coroutines.delay(2000)
                                             triggerCapture(action, attempt + 1)
                                         }
@@ -223,7 +207,7 @@ fun CameraScreen(viewModel: GemmaViewModel) {
     LaunchedEffect(pendingAction, imageCapture) {
         if (pendingAction != null && imageCapture != null) {
             cameraState = CameraState.ANALYZING
-            tts?.speak("کیمرہ سامنے رکھیں", TextToSpeech.QUEUE_FLUSH, null, "cam")
+            viewModel.speakStatus("کیمرہ سامنے رکھیں")
             kotlinx.coroutines.delay(3000)
             triggerCapture(pendingAction)
         }

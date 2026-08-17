@@ -6,6 +6,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import android.speech.tts.TextToSpeech
+import java.util.Locale
+import android.util.Log
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import com.aurasight.app.ai.AppDatabase
 import com.aurasight.app.ai.CartCalculator
 import com.aurasight.app.ai.CartEntry
@@ -29,7 +34,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 
-data class ChatMessage(val role: String, val text: String)
+data class ChatMessage(val role: String, val text: String, val imageBitmap: android.graphics.Bitmap? = null)
 
 /**
  * Manages the Gemma model lifecycle and loading state.
@@ -61,12 +66,40 @@ class GemmaViewModel(application: Application) : AndroidViewModel(application), 
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state.asStateFlow()
 
+    // Concurrency and AI Processing State
+    val isProcessing = MutableStateFlow(false)
+    private val askMutex = Mutex()
+
+    // Centralized Text-To-Speech
+    private var tts: TextToSpeech? = null
+
+    private fun initTts() {
+        if (tts != null) return
+        tts = TextToSpeech(getApplication()) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                // Urdu Language
+                val locale = Locale("ur", "PK")
+                val result = tts?.setLanguage(locale)
+                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    Log.e("AuraSight/TTS", "Urdu not supported or missing data")
+                } else {
+                    // Slow down slightly for better comprehension
+                    tts?.setSpeechRate(0.9f)
+                }
+            } else {
+                Log.e("AuraSight/TTS", "TTS Initialization failed")
+            }
+        }
+    }
+
     private val _chatHistory = MutableStateFlow<List<ChatMessage>>(emptyList())
     val chatHistory: StateFlow<List<ChatMessage>> = _chatHistory.asStateFlow()
 
-    fun addMessage(role: String, text: String) {
+    var latestCameraBitmap: android.graphics.Bitmap? = null
+
+    fun addMessage(role: String, text: String, bitmap: android.graphics.Bitmap? = null) {
         val current = _chatHistory.value.toMutableList()
-        current.add(ChatMessage(role, text))
+        current.add(ChatMessage(role, text, bitmap))
         _chatHistory.value = current
     }
 
@@ -95,11 +128,43 @@ class GemmaViewModel(application: Application) : AndroidViewModel(application), 
         val deferred = kotlinx.coroutines.CompletableDeferred<String>()
         cameraResultDeferred = deferred
         pendingCameraAction.value = action
-        return deferred.await()
+        return kotlinx.coroutines.withTimeoutOrNull(15_000L) {
+            deferred.await()
+        } ?: run {
+            cameraResultDeferred = null
+            pendingCameraAction.value = null
+            "Camera action timed out"
+        }
     }
 
     /** True once initialize() has been called, so we don't double-init */
     private var initStarted = false
+    
+    // Hardware triggers
+    val hardwareMicTrigger = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    fun processHardwareCameraTrigger() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            if (isProcessing.value) return@launch
+            isProcessing.value = true
+            try {
+                speakStatus("تصویر لے رہا ہوں")
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    navigateTo("CAMERA")
+                }
+                val imageResult = requestCameraAction("SCENE")
+                val promptText = "User asked: 'سامنے کیا ہے'. Image shows: $imageResult. Describe this briefly in Urdu."
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    navigateTo("VOICE")
+                }
+                askAndSpeak(promptText)
+            } catch (e: Exception) {
+                // Ignore or handle
+            } finally {
+                isProcessing.value = false
+            }
+        }
+    }
 
     /**
      * Call this lazily — only when the user first tries to speak.
@@ -148,6 +213,9 @@ class GemmaViewModel(application: Application) : AndroidViewModel(application), 
                 }
 
                 // Step 4 — Done
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    initTts()
+                }
                 _state.value = State.Ready
 
             } catch (e: Exception) {
@@ -160,10 +228,86 @@ class GemmaViewModel(application: Application) : AndroidViewModel(application), 
         super.onCleared()
         GemmaEngineManager.shutdown()
         WhisperEngine.shutdown()
+        tts?.stop()
+        tts?.shutdown()
     }
 
     /** Send a message to Gemma. Only call when state == Ready. */
-    suspend fun ask(text: String): String = GemmaEngineManager.ask(text)
+    suspend fun ask(text: String): String {
+        return askMutex.withLock {
+            GemmaEngineManager.ask(text)
+        }
+    }
+
+    /** 
+     * Core architectural rule: ALL final AI replies must be spoken through this function.
+     * Includes a concurrency lock to prevent LiteRT-LM "Session not prefilled yet" errors.
+     */
+    suspend fun askAndSpeak(text: String, addToHistory: Boolean = true): String {
+        isProcessing.value = true
+        try {
+            // ask() already acquires the lock
+            val response = ask(text)
+            if (addToHistory) {
+                addMessage("ai", response, latestCameraBitmap)
+                latestCameraBitmap = null
+            }
+            tts?.speak(response, TextToSpeech.QUEUE_FLUSH, null, "reply")
+            return response
+        } finally {
+            isProcessing.value = false
+        }
+    }
+
+    /** Intercept voice commands to trigger camera directly, bypassing one LLM pass. */
+    fun processVoiceCommand(text: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            if (isProcessing.value) return@launch
+            isProcessing.value = true
+            try {
+                val sceneTriggers = listOf("یہ کیا ہے", "کیا ہے یہ", "سامنے کیا ہے")
+                val currencyTriggers = listOf("نوٹ", "کتنے کا نوٹ", "کرنسی")
+                
+                var promptText = text
+                var cameraAction = ""
+                
+                if (sceneTriggers.any { text.contains(it) }) {
+                    cameraAction = "SCENE"
+                } else if (currencyTriggers.any { text.contains(it) }) {
+                    cameraAction = "CURRENCY"
+                }
+                
+                addMessage("user", text)
+                
+                if (cameraAction.isNotEmpty()) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        navigateTo("CAMERA")
+                    }
+                    val imageResult = requestCameraAction(cameraAction)
+                    promptText = "User asked: '$text'. Image shows: $imageResult. ${if (cameraAction == "SCENE") "Describe this briefly in Urdu." else "Tell them the amount in Urdu."}"
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        navigateTo("VOICE")
+                    }
+                }
+                
+                askAndSpeak(promptText)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onSuccess()
+                }
+            } catch (e: Exception) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onError(e.message ?: "Error processing command")
+                }
+            } finally {
+                isProcessing.value = false
+            }
+        }
+    }
+
+    /** Speak an interstitial UI cue (like "کیمرہ سامنے رکھیں") without invoking the AI engine. */
+    fun speakStatus(text: String) {
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "status")
+    }
     // ── Navigation Delegate ───────────────────────────────────────────────────
     override fun navigateTo(tab: String) {
         val appTab = try {
