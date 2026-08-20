@@ -139,7 +139,7 @@ object GemmaEngineManager {
         }
         
         val generativeModel = GenerativeModel(
-            modelName = "gemma-4-31b-it",
+            modelName = "gemini-1.5-flash",
             apiKey = com.aurasight.app.BuildConfig.API_KEY,
             systemInstruction = content { text(SYSTEM_PROMPT.trimIndent()) },
             tools = if (functionDeclarations.isNotEmpty()) listOf(Tool(functionDeclarations)) else null
