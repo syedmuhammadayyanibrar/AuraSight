@@ -7,6 +7,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Text
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -31,13 +35,18 @@ fun CartScreen(viewModel: GemmaViewModel) {
             .background(Color.White)
             .padding(24.dp)
     ) {
-        Text(
-            "کھاتہ (Khata)",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF111827),
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 16.dp)) {
+            IconButton(onClick = { viewModel.navigateTo("VOICE") }) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color(0xFF111827))
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                "ٹوکری (Cart)",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF111827)
+            )
+        }
 
         if (entries.isEmpty()) {
             Box(

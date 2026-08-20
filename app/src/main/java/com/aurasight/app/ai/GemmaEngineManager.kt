@@ -115,9 +115,9 @@ object GemmaEngineManager {
                             if (param.name != null && args.containsKey(param.name)) {
                                 val argVal = args[param.name]
                                 callArgs[param] = when (param.type.classifier) {
-                                    Int::class -> (argVal as? Number)?.toInt()
-                                    Double::class -> (argVal as? Number)?.toDouble()
-                                    else -> argVal
+                                    Int::class -> if (argVal is Number) argVal.toInt() else argVal?.toString()?.toDoubleOrNull()?.toInt() ?: 0
+                                    Double::class -> if (argVal is Number) argVal.toDouble() else argVal?.toString()?.toDoubleOrNull() ?: 0.0
+                                    else -> argVal?.toString() ?: ""
                                 }
                             }
                         }
