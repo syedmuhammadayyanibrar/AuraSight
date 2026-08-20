@@ -1,9 +1,6 @@
 package com.aurasight.app.ai
 
 import android.util.Log
-import com.google.ai.edge.litertlm.Tool
-import com.google.ai.edge.litertlm.ToolParam
-import com.google.ai.edge.litertlm.ToolSet
 
 private const val TAG = "AuraSight/KhataTools"
 

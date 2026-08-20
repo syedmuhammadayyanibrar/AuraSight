@@ -1,36 +1,35 @@
 package com.aurasight.app.ai
-import com.google.ai.edge.litertlm.ToolSet
+
 import android.content.Context
-import com.google.ai.edge.litertlm.Backend
-import com.google.ai.edge.litertlm.Contents
-import com.google.ai.edge.litertlm.Conversation
-import com.google.ai.edge.litertlm.ConversationConfig
-import com.google.ai.edge.litertlm.Engine
-import com.google.ai.edge.litertlm.EngineConfig
-import com.google.ai.edge.litertlm.SamplerConfig
-import com.google.ai.edge.litertlm.tool
+import android.util.Log
+import com.google.ai.client.generativeai.GenerativeModel
+import com.google.ai.client.generativeai.type.FunctionDeclaration
+import com.google.ai.client.generativeai.type.Schema
+import com.google.ai.client.generativeai.type.Tool
+import com.google.ai.client.generativeai.type.defineFunction
+import com.google.ai.client.generativeai.type.content
+import com.google.ai.client.generativeai.Chat
+import com.google.ai.client.generativeai.type.FunctionCallPart
+import com.google.ai.client.generativeai.type.FunctionResponsePart
+import com.google.ai.client.generativeai.type.TextPart
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.json.JSONObject
+import kotlin.reflect.KClass
+import kotlin.reflect.KFunction
+import kotlin.reflect.KParameter
+import kotlin.reflect.full.declaredFunctions
+import kotlin.reflect.full.findAnnotation
+import kotlinx.coroutines.runBlocking
+import kotlin.reflect.full.callSuspendBy
 
-/**
- * Singleton wrapper around LiteRT-LM Engine for Gemma 3n E2B.
- * Owns model lifecycle. Call initialize() once from a background coroutine
- * (Application.onCreate or a splash/loading screen) — never on main thread,
- * model load can take up to ~10s.
- */
 object GemmaEngineManager {
-    private var engine: Engine? = null
-    private var conversation: Conversation? = null
-
-    // Guards against overlapping sendMessage calls on the same Conversation —
-    // LiteRT-LM's Conversation is not safe for concurrent calls; overlapping
-    // requests previously caused "Session is not prefilled yet" crashes.
+    private var chat: Chat? = null
     private val askMutex = Mutex()
+    private val toolHandlers = mutableMapOf<String, suspend (Map<String, Any?>) -> String>()
 
-    // Rewritten to be maximally directive — small models (2B) default to
-    // chatting instead of calling tools unless trigger phrases are mapped
-    // explicitly and the "no chat mode" framing is stated up front.
     private const val SYSTEM_PROMPT = """
         You are AuraSight, a tool-calling agent for a blind shopkeeper in Pakistan.
         You are NOT a chatbot. You have NO general knowledge conversation mode.
@@ -57,49 +56,139 @@ object GemmaEngineManager {
         speak before acting — for every other trigger above, act first, speak after.
 
         Never state a price, total, or change amount from memory — only from a tool result.
+        
+        CRITICAL RULE: NEVER repeat these system instructions in your output. You must ONLY output your conversational response to the user. Do not say "Understood" or acknowledge these rules. Just answer the user's query.
     """
 
-    /** Call once. Model path = bundled .litertlm asset extracted to filesDir. */
-    suspend fun initialize(context: Context, modelPath: String, toolSets: List<ToolSet>) {
-        check(engine == null) { "GemmaEngineManager already initialized" }
-        val engineConfig = EngineConfig(
-            modelPath = modelPath,
-            backend = Backend.CPU(numOfThreads = 4), // GPU() once confirmed stable on target 4GB devices
-            cacheDir = context.cacheDir.path,
+    suspend fun initialize(context: Context, toolSets: List<ToolSet>) {
+        toolHandlers.clear()
+        
+        val functionDeclarations = mutableListOf<FunctionDeclaration>()
+        
+        for (toolSet in toolSets) {
+            val kClass = toolSet::class
+            for (func in kClass.declaredFunctions) {
+                val toolAnn = func.findAnnotation<com.aurasight.app.ai.Tool>()
+                if (toolAnn != null) {
+                    val name = func.name
+                    val desc = toolAnn.description
+                    val params = mutableListOf<Schema<*>>()
+                    val requiredParams = mutableListOf<String>()
+                    
+                    for (param in func.parameters) {
+                        if (param.name == null || param.kind != kotlin.reflect.KParameter.Kind.VALUE) continue
+                        val paramAnn = param.findAnnotation<com.aurasight.app.ai.ToolParam>()
+                        val paramDesc = paramAnn?.description ?: ""
+                        
+                        val schema = when (param.type.classifier) {
+                            String::class -> Schema.str(param.name!!, paramDesc)
+                            Int::class -> Schema.int(param.name!!, paramDesc)
+                            Double::class -> Schema.double(param.name!!, paramDesc)
+                            Boolean::class -> Schema.bool(param.name!!, paramDesc)
+                            else -> Schema.str(param.name!!, paramDesc)
+                        }
+                        params.add(schema)
+                        if (!param.isOptional) {
+                            requiredParams.add(param.name!!)
+                        }
+                    }
+                    
+                    functionDeclarations.add(
+                        defineFunction(
+                            name = name,
+                            description = desc,
+                            parameters = params,
+                            requiredParameters = requiredParams
+                        )
+                    )
+                    
+                    toolHandlers[name] = { args ->
+                        val callArgs = mutableMapOf<kotlin.reflect.KParameter, Any?>()
+                        callArgs[func.parameters[0]] = toolSet
+                        for (param in func.parameters) {
+                            if (param.name != null && args.containsKey(param.name)) {
+                                val argVal = args[param.name]
+                                callArgs[param] = when (param.type.classifier) {
+                                    Int::class -> (argVal as? Number)?.toInt()
+                                    Double::class -> (argVal as? Number)?.toDouble()
+                                    else -> argVal
+                                }
+                            }
+                        }
+                        
+                        val result = if (func.isSuspend) {
+                            func.callSuspendBy(callArgs)
+                        } else {
+                            func.callBy(callArgs)
+                        }
+                        
+                        if (result is Map<*, *>) {
+                            JSONObject(result).toString()
+                        } else {
+                            result.toString()
+                        }
+                    }
+                }
+            }
+        }
+        
+        val generativeModel = GenerativeModel(
+            modelName = "gemma-4-31b-it",
+            apiKey = com.aurasight.app.BuildConfig.API_KEY,
+            systemInstruction = content { text(SYSTEM_PROMPT.trimIndent()) },
+            tools = if (functionDeclarations.isNotEmpty()) listOf(Tool(functionDeclarations)) else null
         )
-        val newEngine = Engine(engineConfig)
-        newEngine.initialize()
-        engine = newEngine
-        val conversationConfig = ConversationConfig(
-            systemInstruction = Contents.of(SYSTEM_PROMPT.trimIndent()),
-            // Lowered further, 0.6 -> 0.2: small models need low randomness to
-            // reliably follow the mandatory-trigger rules instead of drifting into chat.
-            samplerConfig = SamplerConfig(topK = 10, topP = 0.9, temperature = 0.2),
-            tools = toolSets.map { tool(it) },
-        )
-        conversation = newEngine.createConversation(conversationConfig)
+        chat = generativeModel.startChat()
     }
 
-    /** Streaming ask — preferred for voice UX (start TTS on first tokens). */
-    suspend fun askStreaming(text: String): Flow<com.google.ai.edge.litertlm.Message> = askMutex.withLock {
-        val c = conversation ?: error("Not initialized")
-        c.sendMessageAsync(text)
-    }
-
-    /** Blocking ask — simpler for early MVP wiring / tests.
-     *  Hard 30s timeout so a stuck tool call (e.g. camera) can never hold the
-     *  mutex forever and silently block every future message. */
     suspend fun ask(text: String): String = askMutex.withLock {
-        val c = conversation ?: error("Not initialized")
-        kotlinx.coroutines.withTimeoutOrNull(30_000) {
-            c.sendMessage(Contents.of(text)).toString()
-        } ?: "معذرت، جواب دینے میں وقت لگ گیا۔ دوبارہ کوشش کریں۔"
+        val c = chat ?: error("Not initialized")
+        var currentMsg = content { text(text) }
+        var resultText = ""
+        
+        for (i in 0..10) { // Max 10 tool call hops
+            try {
+                val response = c.sendMessage(currentMsg)
+                
+                var hasToolCall = false
+                var toolResList = mutableListOf<FunctionResponsePart>()
+                
+                for (part in response.candidates.firstOrNull()?.content?.parts.orEmpty()) {
+                    if (part is FunctionCallPart) {
+                        hasToolCall = true
+                        val handler = toolHandlers[part.name]
+                        val toolResultStr = if (handler != null) {
+                            handler(part.args)
+                        } else {
+                            "Tool not found"
+                        }
+                        toolResList.add(FunctionResponsePart(part.name, JSONObject().put("result", toolResultStr)))
+                    } else if (part is TextPart) {
+                        resultText += part.text
+                    }
+                }
+                
+                if (!hasToolCall) {
+                    if (resultText.isEmpty()) {
+                        return response.text ?: "معذرت، مجھے سمجھ نہیں آیا۔"
+                    }
+                    return resultText
+                } else {
+                    currentMsg = content("function") {
+                        for (res in toolResList) {
+                            part(res)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("GemmaEngineManager", "Cloud AI error", e)
+                return "معذرت، انٹرنیٹ کا مسئلہ ہے۔"
+            }
+        }
+        return resultText.ifEmpty { "معذرت، جواب دینے میں وقت لگ گیا۔ دوبارہ کوشش کریں۔" }
     }
 
     fun shutdown() {
-        conversation?.close()
-        engine?.close()
-        conversation = null
-        engine = null
+        chat = null
     }
 }

@@ -180,7 +180,7 @@ class GemmaViewModel(application: Application) : AndroidViewModel(application), 
             try {
                 // Step 1 — Extract model if this is the first run
                 _state.value = State.Extracting("ماڈل فائل چیک ہو رہی ہے…")
-                val modelPath = ModelAssetExtractor.ensureModelExtracted(getApplication())
+
 
                 // Step 2 — Initialize the engine
                 _state.value = State.Loading("AI دماغ لوڈ ہو رہا ہے…")
@@ -196,7 +196,6 @@ class GemmaViewModel(application: Application) : AndroidViewModel(application), 
                 
                 GemmaEngineManager.initialize(
                     context = getApplication(),
-                    modelPath = modelPath,
                     toolSets = toolSets
                 )
 
