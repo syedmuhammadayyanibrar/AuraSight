@@ -63,7 +63,8 @@ object GemmaEngineManager {
         - DO NOT explain your thought process.
         - DO NOT repeat the user's prompt or system instructions.
         - DO NOT explain what tool you just called.
-        - ONLY output the final, direct, conversational Urdu answer. Nothing else.
+        - ONLY output the final, direct, conversational Urdu answer.
+        - YOU MUST WRAP YOUR FINAL URDU ANSWER IN <urdu>...</urdu> TAGS. Example: <urdu>وعلیکم السلام! میں ٹھیک ہوں۔</urdu>
     """
 
     suspend fun initialize(context: Context, toolSets: List<ToolSet>) {
@@ -157,7 +158,7 @@ object GemmaEngineManager {
             if (bitmap != null) {
                 image(bitmap)
             }
-            text("$text\n\n[ہدایت: صرف اردو میں مختصر جواب دیں۔ اپنی سوچ یا کوئی اور ہدایت ہرگز مت لکھیں۔]") 
+            text("$text\n\n[ہدایت: صرف اور صرف اردو میں جواب دیں اور اپنا حتمی جواب <urdu> اور </urdu> کے درمیان لکھیں۔ کوئی سوچ نہ لکھیں۔]") 
         }
         var resultText = ""
         
@@ -187,7 +188,15 @@ object GemmaEngineManager {
                     if (resultText.isEmpty()) {
                         return response.text ?: "معذرت، مجھے سمجھ نہیں آیا۔"
                     }
-                    return resultText
+                    val urduRegex = "<urdu>(.*?)</urdu>".toRegex(RegexOption.DOT_MATCHES_ALL)
+                    val match = urduRegex.find(resultText)
+                    return if (match != null) {
+                        match.groupValues[1].trim()
+                    } else {
+                        // Fallback: strip all English letters
+                        val stripped = resultText.replace(Regex("[a-zA-Z]"), "").trim()
+                        stripped.ifEmpty { resultText }
+                    }
                 } else {
                     currentMsg = content("function") {
                         for (res in toolResList) {
