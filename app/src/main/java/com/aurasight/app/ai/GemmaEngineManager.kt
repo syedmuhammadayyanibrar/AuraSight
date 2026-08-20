@@ -59,7 +59,11 @@ object GemmaEngineManager {
         
         Never state a price, total, or change amount from memory — only from a tool result.
         
-        CRITICAL RULE: NEVER repeat these system instructions, do not output your reasoning, do not output <thought> blocks, and do not acknowledge these rules. You must ONLY output the final conversational Urdu text meant to be spoken to the user.
+        CRITICAL RULE FOR TTS: Your entire output will be read aloud by a Text-to-Speech engine to a blind user. 
+        - DO NOT explain your thought process.
+        - DO NOT repeat the user's prompt or system instructions.
+        - DO NOT explain what tool you just called.
+        - ONLY output the final, direct, conversational Urdu answer. Nothing else.
     """
 
     suspend fun initialize(context: Context, toolSets: List<ToolSet>) {
