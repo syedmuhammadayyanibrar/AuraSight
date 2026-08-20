@@ -162,28 +162,11 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                                         cameraState = CameraState.DONE
                                     }
                                 } else {
-                                    // Manual trigger
-                                    val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-                                    recognizer.process(image)
-                                        .addOnSuccessListener { visionText ->
-                                            val textFound = visionText.text.take(200)
-                                            viewModel.pendingCameraContext = "Labels: $labelText. Text in image: $textFound"
-                                            
-                                            // Put picture in chat & navigate to Voice
-                                            viewModel.addMessage("user", "", viewModel.latestCameraBitmap)
-                                            viewModel.latestCameraBitmap = null
-                                            viewModel.navigateTo("VOICE")
-                                            cameraState = CameraState.IDLE
-                                        }
-                                        .addOnFailureListener {
-                                            viewModel.pendingCameraContext = "Labels: $labelText. Text: (failed)"
-                                            
-                                            // Put picture in chat & navigate to Voice
-                                            viewModel.addMessage("user", "", viewModel.latestCameraBitmap)
-                                            viewModel.latestCameraBitmap = null
-                                            viewModel.navigateTo("VOICE")
-                                            cameraState = CameraState.IDLE
-                                        }
+                                    // Manual trigger: directly save bitmap and switch to VOICE for mic input
+                                    viewModel.addMessage("user", "", viewModel.latestCameraBitmap)
+                                    viewModel.navigateTo("VOICE")
+                                    viewModel.hardwareMicTrigger.tryEmit(Unit)
+                                    cameraState = CameraState.IDLE
                                 }
                             }
                             .addOnFailureListener {
@@ -227,8 +210,12 @@ fun CameraScreen(viewModel: GemmaViewModel) {
         if (pendingAction != null && imageCapture != null) {
             cameraState = CameraState.ANALYZING
             viewModel.speakStatus("کیمرہ سامنے رکھیں")
-            kotlinx.coroutines.delay(3000)
+            kotlinx.coroutines.delay(2000) // Reduced from 3000ms
             triggerCapture(pendingAction)
+        } else if (pendingAction == null && imageCapture != null) {
+            cameraState = CameraState.ANALYZING
+            kotlinx.coroutines.delay(300) // Reduced from 1500ms to be near-instant
+            triggerCapture(null)
         }
     }
 

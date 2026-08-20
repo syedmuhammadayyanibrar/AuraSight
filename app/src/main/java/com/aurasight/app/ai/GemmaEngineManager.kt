@@ -55,6 +55,8 @@ object GemmaEngineManager {
         Only call the tool after the user confirms. This is the one case where you
         speak before acting — for every other trigger above, act first, speak after.
 
+        CRITICAL RULE: If the user provides an image with their request, DO NOT call describeScene(), readText(), or identifyCurrency(). Just analyze the provided image directly to answer their question.
+        
         Never state a price, total, or change amount from memory — only from a tool result.
         
         CRITICAL RULE: NEVER repeat these system instructions in your output. You must ONLY output your conversational response to the user. Do not say "Understood" or acknowledge these rules. Just answer the user's query.
@@ -141,9 +143,14 @@ object GemmaEngineManager {
         chat = generativeModel.startChat()
     }
 
-    suspend fun ask(text: String): String = askMutex.withLock {
+    suspend fun ask(text: String, bitmap: android.graphics.Bitmap? = null): String = askMutex.withLock {
         val c = chat ?: error("Not initialized")
-        var currentMsg = content { text(text) }
+        var currentMsg = content { 
+            if (bitmap != null) {
+                image(bitmap)
+            }
+            text(text) 
+        }
         var resultText = ""
         
         for (i in 0..10) { // Max 10 tool call hops

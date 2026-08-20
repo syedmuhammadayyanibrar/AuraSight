@@ -234,9 +234,9 @@ class GemmaViewModel(application: Application) : AndroidViewModel(application), 
     }
 
     /** Send a message to Gemma. Only call when state == Ready. */
-    suspend fun ask(text: String): String {
+    suspend fun ask(text: String, bitmap: android.graphics.Bitmap? = null): String {
         return askMutex.withLock {
-            GemmaEngineManager.ask(text)
+            GemmaEngineManager.ask(text, bitmap)
         }
     }
 
@@ -247,11 +247,11 @@ class GemmaViewModel(application: Application) : AndroidViewModel(application), 
     suspend fun askAndSpeak(text: String, addToHistory: Boolean = true): String {
         isProcessing.value = true
         try {
-            // ask() already acquires the lock
-            val response = ask(text)
+            val bmp = latestCameraBitmap
+            latestCameraBitmap = null // Unconditionally clear it so it doesn't leak into future queries
+            val response = ask(text, bmp)
             if (addToHistory) {
-                addMessage("ai", response, latestCameraBitmap)
-                latestCameraBitmap = null
+                addMessage("ai", response, null) // Don't attach image to AI's UI message
             }
             tts?.speak(response, TextToSpeech.QUEUE_FLUSH, null, "reply")
             return response
@@ -276,9 +276,9 @@ class GemmaViewModel(application: Application) : AndroidViewModel(application), 
                     promptText = "Image context: $pendingCameraContext. User asked: '$text'. Answer the user's question briefly in Urdu."
                     pendingCameraContext = null
                     addMessage("user", text)
-                } else if (sceneTriggers.any { text.contains(it) }) {
+                } else if (latestCameraBitmap == null && sceneTriggers.any { text.contains(it) }) {
                     cameraAction = "SCENE"
-                } else if (currencyTriggers.any { text.contains(it) }) {
+                } else if (latestCameraBitmap == null && currencyTriggers.any { text.contains(it) }) {
                     cameraAction = "CURRENCY"
                 }
                 
