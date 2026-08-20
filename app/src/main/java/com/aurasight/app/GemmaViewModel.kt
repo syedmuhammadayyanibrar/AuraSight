@@ -148,22 +148,15 @@ class GemmaViewModel(application: Application) : AndroidViewModel(application), 
     fun processHardwareCameraTrigger() {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             if (isProcessing.value) return@launch
-            isProcessing.value = true
             try {
                 speakStatus("تصویر لے رہا ہوں")
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     navigateTo("CAMERA")
                 }
-                val imageResult = requestCameraAction("SCENE")
-                val promptText = "User asked: 'سامنے کیا ہے'. Image shows: $imageResult. Describe this briefly in Urdu."
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    navigateTo("VOICE")
-                }
-                askAndSpeak(promptText)
+                // MANUAL action bypasses MLKit, takes the picture, navigates to Voice, and triggers mic automatically.
+                requestCameraAction("MANUAL")
             } catch (e: Exception) {
                 // Ignore or handle
-            } finally {
-                isProcessing.value = false
             }
         }
     }

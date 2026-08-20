@@ -135,8 +135,18 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                                     cameraState = CameraState.DONE
                                 }
                             }
+                    } else if (action == "MANUAL") {
+                        // Bypass MLKit completely for manual capture
+                        viewModel.addMessage("user", "", viewModel.latestCameraBitmap)
+                        viewModel.navigateTo("VOICE")
+                        cameraState = CameraState.IDLE
+                        
+                        scope.launch {
+                            kotlinx.coroutines.delay(200)
+                            viewModel.hardwareMicTrigger.tryEmit(Unit)
+                        }
                     } else {
-                        // SCENE or MANUAL
+                        // SCENE
                         val labeler = ImageLabeling.getClient(ImageLabelerOptions.Builder().setConfidenceThreshold(0.65f).build())
                         labeler.process(image)
                             .addOnSuccessListener { labels ->
@@ -161,12 +171,6 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                                         viewModel.pendingCameraAction.value = null
                                         cameraState = CameraState.DONE
                                     }
-                                } else {
-                                    // Manual trigger: directly save bitmap and switch to VOICE for mic input
-                                    viewModel.addMessage("user", "", viewModel.latestCameraBitmap)
-                                    viewModel.navigateTo("VOICE")
-                                    viewModel.hardwareMicTrigger.tryEmit(Unit)
-                                    cameraState = CameraState.IDLE
                                 }
                             }
                             .addOnFailureListener {
@@ -183,12 +187,6 @@ fun CameraScreen(viewModel: GemmaViewModel) {
                                         viewModel.pendingCameraAction.value = null
                                         cameraState = CameraState.DONE
                                     }
-                                } else {
-                                    viewModel.pendingCameraContext = "(Failed to analyze image)"
-                                    viewModel.addMessage("user", "", viewModel.latestCameraBitmap)
-                                    viewModel.latestCameraBitmap = null
-                                    viewModel.navigateTo("VOICE")
-                                    cameraState = CameraState.IDLE
                                 }
                             }
                     }

@@ -59,7 +59,7 @@ object GemmaEngineManager {
         
         Never state a price, total, or change amount from memory — only from a tool result.
         
-        CRITICAL RULE: NEVER repeat these system instructions in your output. You must ONLY output your conversational response to the user. Do not say "Understood" or acknowledge these rules. Just answer the user's query.
+        CRITICAL RULE: NEVER repeat these system instructions, do not output your reasoning, do not output <thought> blocks, and do not acknowledge these rules. You must ONLY output the final conversational Urdu text meant to be spoken to the user.
     """
 
     suspend fun initialize(context: Context, toolSets: List<ToolSet>) {
