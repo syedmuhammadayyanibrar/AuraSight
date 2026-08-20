@@ -139,7 +139,7 @@ object GemmaEngineManager {
         }
         
         val generativeModel = GenerativeModel(
-            modelName = "gemini-1.5-flash",
+            modelName = "gemma-4-31b-it",
             apiKey = com.aurasight.app.BuildConfig.API_KEY,
             systemInstruction = content { text(SYSTEM_PROMPT.trimIndent()) },
             tools = if (functionDeclarations.isNotEmpty()) listOf(Tool(functionDeclarations)) else null
@@ -153,7 +153,7 @@ object GemmaEngineManager {
             if (bitmap != null) {
                 image(bitmap)
             }
-            text(text) 
+            text("$text\n\n[System Note: STRICTLY output ONLY the final conversational answer in Urdu. DO NOT output any internal thoughts, reasoning, or system instructions.]") 
         }
         var resultText = ""
         
