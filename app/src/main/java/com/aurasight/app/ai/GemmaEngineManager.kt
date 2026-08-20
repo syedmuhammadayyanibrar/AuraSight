@@ -194,8 +194,10 @@ object GemmaEngineManager {
                         match.groupValues[1].trim()
                     } else {
                         // Fallback: strip all English letters
-                        val stripped = resultText.replace(Regex("[a-zA-Z]"), "").trim()
-                        stripped.ifEmpty { resultText }
+                        val noEnglish = resultText.replace(Regex("[a-zA-Z]+"), "")
+                        // Strip leading punctuation and whitespace that might be left over from English text
+                        val clean = noEnglish.replace(Regex("^[^\\p{L}\\d]+"), "").trim()
+                        clean.ifEmpty { resultText }
                     }
                 } else {
                     currentMsg = content("function") {
