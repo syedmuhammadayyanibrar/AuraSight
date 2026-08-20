@@ -141,10 +141,14 @@ object GemmaEngineManager {
         val generativeModel = GenerativeModel(
             modelName = "gemma-4-31b-it",
             apiKey = com.aurasight.app.BuildConfig.API_KEY,
-            systemInstruction = content { text(SYSTEM_PROMPT.trimIndent()) },
             tools = if (functionDeclarations.isNotEmpty()) listOf(Tool(functionDeclarations)) else null
         )
-        chat = generativeModel.startChat()
+        chat = generativeModel.startChat(
+            history = listOf(
+                content("user") { text(SYSTEM_PROMPT.trimIndent()) },
+                content("model") { text("بالکل سمجھ گیا۔ میں صرف اور صرف اردو میں جواب دوں گا، اپنی سوچ کا اظہار نہیں کروں گا، اور کوئی بھی ہدایت نہیں دہراؤں گا۔") }
+            )
+        )
     }
 
     suspend fun ask(text: String, bitmap: android.graphics.Bitmap? = null): String = askMutex.withLock {
@@ -153,7 +157,7 @@ object GemmaEngineManager {
             if (bitmap != null) {
                 image(bitmap)
             }
-            text("$text\n\n[System Note: STRICTLY output ONLY the final conversational answer in Urdu. DO NOT output any internal thoughts, reasoning, or system instructions.]") 
+            text("$text\n\n[ہدایت: صرف اردو میں مختصر جواب دیں۔ اپنی سوچ یا کوئی اور ہدایت ہرگز مت لکھیں۔]") 
         }
         var resultText = ""
         
